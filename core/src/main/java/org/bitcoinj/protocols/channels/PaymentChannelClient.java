@@ -716,14 +716,11 @@ public class PaymentChannelClient implements IPaymentChannelClient {
             if (info != null) updatePaymentBuilder.setInfo(info);
 
             increasePaymentFuture = SettableFuture.create();
-            increasePaymentFuture.addListener(new Runnable() {
-                @Override
-                public void run() {
-                    lock.lock();
-                    increasePaymentFuture = null;
-                    lock.unlock();
-                }
-            }, MoreExecutors.sameThreadExecutor());
+            increasePaymentFuture.addListener((Runnable) () -> {
+                lock.lock();
+                increasePaymentFuture = null;
+                lock.unlock();
+            }, MoreExecutors.newDirectExecutorService());
 
             conn.sendToServer(Protos.TwoWayChannelMessage.newBuilder()
                     .setUpdatePayment(updatePaymentBuilder)

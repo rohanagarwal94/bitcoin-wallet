@@ -19,7 +19,7 @@ package org.bitcoinj.net.discovery;
 
 import com.google.common.annotations.*;
 import com.google.protobuf.*;
-import com.squareup.okhttp.*;
+import okhttp3.*;
 import org.bitcoin.crawler.*;
 import org.bitcoinj.core.*;
 import org.slf4j.*;

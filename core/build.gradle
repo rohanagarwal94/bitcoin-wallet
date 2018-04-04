@@ -12,6 +12,7 @@ exclude(module: 'jsr305')
     compile group: 'com.google.code.findbugs', name: 'jsr305', version:'2.0.1'
     compile group: 'net.jcip', name: 'jcip-annotations', version:'1.0'
     compile group: 'com.lambdaworks', name: 'scrypt', version:'1.4.0'
+    compile group: 'org.bitcoinj', name: 'orchid', version:'1.2.1'
     compile group: 'postgresql', name: 'postgresql', version:'9.1-901.jdbc4'
     compile group: 'mysql', name: 'mysql-connector-java', version:'5.1.33'
     compile group: 'org.fusesource.leveldbjni', name: 'leveldbjni-all', version:'1.8'
