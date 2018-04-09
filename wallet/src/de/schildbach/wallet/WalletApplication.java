@@ -24,6 +24,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.concurrent.TimeUnit;
 
+import org.bitcoinj.core.Address;
+import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.VerificationException;
 import org.bitcoinj.core.VersionMessage;
@@ -40,6 +42,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableList;
+import com.subgraph.orchid.encoders.Hex;
 
 import de.schildbach.wallet.service.BlockchainService;
 import de.schildbach.wallet.util.Bluetooth;
@@ -205,6 +208,8 @@ public class WalletApplication extends Application {
         } else {
             final Stopwatch watch = Stopwatch.createStarted();
             wallet = new Wallet(Constants.NETWORK_PARAMETERS);
+            wallet.importKey(ECKey.fromPublicOnly(Hex.decode("048144f0617ca9f46faf22c3a2aabe2b5a70b41b33d943eedeab45fb0ea39db03bc29a10850dcc0a8a9459a117c39cf773550f3ed72a4fcfb20b6755086c0419d6")));
+            wallet.addWatchedAddress(Address.fromBase58(Constants.NETWORK_PARAMETERS, "msMSr52jyP8HV3Kx9uWRPFHHU1KPPJpYX9"));
             saveWallet();
             backupWallet();
             watch.stop();
