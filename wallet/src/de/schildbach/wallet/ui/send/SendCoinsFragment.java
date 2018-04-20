@@ -18,9 +18,12 @@
 package de.schildbach.wallet.ui.send;
 
 import static android.support.v4.util.Preconditions.checkNotNull;
+import static de.schildbach.wallet.ui.WalletActivity.TAG;
 
 import java.io.FileNotFoundException;
 import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
+import java.lang.ref.WeakReference;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
@@ -69,6 +72,7 @@ import de.schildbach.wallet.offline.DirectPaymentTask;
 import de.schildbach.wallet.service.BlockchainService;
 import de.schildbach.wallet.service.BlockchainState;
 import de.schildbach.wallet.service.BlockchainStateLoader;
+import de.schildbach.wallet.service.UsbService;
 import de.schildbach.wallet.ui.AbstractBindServiceActivity;
 import de.schildbach.wallet.ui.AddressAndLabel;
 import de.schildbach.wallet.ui.CurrencyAmountView;
@@ -80,6 +84,7 @@ import de.schildbach.wallet.ui.InputParser.StringInputParser;
 import de.schildbach.wallet.ui.ProgressDialogFragment;
 import de.schildbach.wallet.ui.ScanActivity;
 import de.schildbach.wallet.ui.TransactionsAdapter;
+import de.schildbach.wallet.ui.WalletActivity;
 import de.schildbach.wallet.util.Bluetooth;
 import de.schildbach.wallet.util.Nfc;
 import de.schildbach.wallet.util.WalletUtils;
@@ -102,6 +107,7 @@ import android.nfc.NfcAdapter;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Message;
 import android.os.Process;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
@@ -112,6 +118,7 @@ import android.support.v4.content.Loader;
 import android.support.v7.widget.RecyclerView;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -130,6 +137,7 @@ import android.widget.CursorAdapter;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 /**
  * @author Andreas Schildbach
@@ -139,6 +147,7 @@ public final class SendCoinsFragment extends Fragment {
     private WalletApplication application;
     private Configuration config;
     private Wallet wallet;
+    private UsbService usbService;
     private ContentResolver contentResolver;
     private LoaderManager loaderManager;
     private FragmentManager fragmentManager;
@@ -205,6 +214,37 @@ public final class SendCoinsFragment extends Fragment {
         REQUEST_PAYMENT_REQUEST, //
         INPUT, // asks for confirmation
         DECRYPTING, SIGNING, SENDING, SENT, FAILED // sending states
+    }
+
+    public static class MyHandler extends Handler {
+        private final WeakReference<WalletActivity> mActivity;
+
+        public MyHandler(WalletActivity activity) {
+            mActivity = new WeakReference<>(activity);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case UsbService.MESSAGE_FROM_SERIAL_PORT:
+                    String data = (String) msg.obj;
+                    if (data != null) {
+                        mActivity.get().prepareDataToBroadcast(data);
+                    }
+                    break;
+                case UsbService.CTS_CHANGE:
+                    Log.d(TAG, "CTS_CHANGE");
+                    Toast.makeText(mActivity.get(), "CTS_CHANGE", Toast.LENGTH_LONG).show();
+                    break;
+                case UsbService.DSR_CHANGE:
+                    Log.d(TAG, "DSR_CHANGE");
+                    Toast.makeText(mActivity.get(), "DSR_CHANGE", Toast.LENGTH_LONG).show();
+                    break;
+                default:
+                    Log.e(TAG, "Unknown message");
+                    break;
+            }
+        }
     }
 
     private final class ReceivingAddressListener
@@ -477,6 +517,7 @@ public final class SendCoinsFragment extends Fragment {
         this.contentResolver = activity.getContentResolver();
         this.loaderManager = getLoaderManager();
         this.fragmentManager = getFragmentManager();
+        this.usbService = application.getUsbService();
     }
 
     @Override
@@ -620,8 +661,17 @@ public final class SendCoinsFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-
         config.setLastExchangeDirection(amountCalculatorLink.getExchangeDirection());
+    }
+
+    public void sendMessageToHardware(String msg) {
+
+        try {
+            usbService.write(msg.getBytes(Constants.CHARSET));
+            Log.d(TAG, "SendMessage: " + msg);
+        } catch (UnsupportedEncodingException e) {
+            Log.e(TAG, e.toString());
+        }
     }
 
     @Override
@@ -907,7 +957,7 @@ public final class SendCoinsFragment extends Fragment {
         // prepare send request
         final SendRequest sendRequest = finalPaymentIntent.toSendRequest();
         sendRequest.emptyWallet = paymentIntent.mayEditAmount()
-                && finalAmount.equals(wallet.getBalance(BalanceType.AVAILABLE));
+                && finalAmount.equals(wallet.getBalance(BalanceType.ESTIMATED));
         sendRequest.feePerKb = fees.get(feeCategory);
         sendRequest.memo = paymentIntent.memo;
         sendRequest.exchangeRate = amountCalculatorLink.getExchangeRate();
@@ -1112,11 +1162,13 @@ public final class SendCoinsFragment extends Fragment {
                     final Address dummy = wallet.currentReceiveAddress(); // won't be used, tx is never
                                                                           // committed
                     final SendRequest sendRequest = paymentIntent.mergeWithEditedValues(amount, dummy).toSendRequest();
-                    sendRequest.signInputs = false;
+                    //TODO : Fix this temp solution
+//                  sendRequest.signInputs = false;
                     sendRequest.emptyWallet = paymentIntent.mayEditAmount()
                             && amount.equals(wallet.getBalance(BalanceType.AVAILABLE));
                     sendRequest.feePerKb = fees.get(feeCategory);
                     wallet.completeTx(sendRequest);
+                    sendMessageToHardware(wallet.getRawTx());
                     dryrunTransaction = sendRequest.tx;
                 } catch (final Exception x) {
                     dryrunException = x;

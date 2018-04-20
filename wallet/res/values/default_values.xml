@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="baudrate_default" translatable="false">115200</string>
+    <string name="databits_default" translatable="false">8</string>
+    <string name="parity_default" translatable="false">0</string>
+    <string name="stopbits_default" translatable="false">1</string>
+    <string name="flowcontrol_default" translatable="false">0</string>
+    <string name="timestamp_format_default" translatable="false">HH:mm:ss.SSS</string>
+</resources>

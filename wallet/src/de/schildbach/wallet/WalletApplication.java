@@ -45,6 +45,7 @@ import com.google.common.collect.ImmutableList;
 import com.subgraph.orchid.encoders.Hex;
 
 import de.schildbach.wallet.service.BlockchainService;
+import de.schildbach.wallet.service.UsbService;
 import de.schildbach.wallet.util.Bluetooth;
 import de.schildbach.wallet.util.CrashReporter;
 import de.schildbach.wallet_test.BuildConfig;
@@ -55,14 +56,17 @@ import android.app.Application;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.bluetooth.BluetoothAdapter;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.IBinder;
 import android.os.StrictMode;
 import android.preference.PreferenceManager;
 import android.support.v4.content.LocalBroadcastManager;
@@ -76,6 +80,7 @@ public class WalletApplication extends Application {
 
     private File walletFile;
     private Wallet wallet;
+    private UsbService usbService;
 
     public static final String ACTION_WALLET_REFERENCE_CHANGED = WalletApplication.class.getPackage().getName()
             + ".wallet_reference_changed";
@@ -85,6 +90,19 @@ public class WalletApplication extends Application {
     public static final long TIME_CREATE_APPLICATION = System.currentTimeMillis();
 
     private static final Logger log = LoggerFactory.getLogger(WalletApplication.class);
+
+
+    private final ServiceConnection usbConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName arg0, IBinder arg1) {
+            usbService = ((UsbService.UsbBinder) arg1).getService();
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName arg0) {
+            usbService = null;
+        }
+    };
 
     @Override
     public void onCreate() {
@@ -176,6 +194,14 @@ public class WalletApplication extends Application {
 
     public Wallet getWallet() {
         return wallet;
+    }
+
+    public UsbService getUsbService() {
+        return usbService;
+    }
+
+    public ServiceConnection getUsbConnection() {
+        return usbConnection;
     }
 
     private void loadWalletFromProtobuf() {

@@ -233,6 +233,8 @@ public class Wallet extends BaseTaggableObject
 
     protected CoinSelector coinSelector = new DefaultCoinSelector();
 
+    private StringBuilder data;
+
     // The wallet version. This is an int that can be used to track breaking changes in the wallet format.
     // You can also use it to detect wallets that come from the future (ie they contain features you
     // do not know how to deal with).
@@ -432,8 +434,9 @@ public class Wallet extends BaseTaggableObject
     public Address currentAddress(KeyChain.KeyPurpose purpose) {
         keyChainGroupLock.lock();
         try {
-            maybeUpgradeToHD();
-            return keyChainGroup.currentAddress(purpose);
+//            maybeUpgradeToHD();
+//            return keyChainGroup.currentAddress(purpose);
+            return Address.fromBase58(params, "msMSr52jyP8HV3Kx9uWRPFHHU1KPPJpYX9");
         } finally {
             keyChainGroupLock.unlock();
         }
@@ -3478,11 +3481,11 @@ public class Wallet extends BaseTaggableObject
         return getBalance();
     }
 
-    /** @deprecated Use {@link #getBalance(CoinSelector)} instead as including watched balances is now the default behaviour */
-    @Deprecated
-    public Coin getWatchedBalance(CoinSelector selector) {
-        return getBalance(selector);
-    }
+//    /** @deprecated Use {@link #getBalance(CoinSelector)} instead as including watched balances is now the default behaviour */
+//    @Deprecated
+//    public Coin getWatchedBalance(CoinSelector selector) {
+//        return getBalance(selector);
+//    }
 
     /**
      * Returns the AVAILABLE balance of this wallet. See {@link BalanceType#AVAILABLE} for details on what this
@@ -3508,7 +3511,7 @@ public class Wallet extends BaseTaggableObject
                 for (TransactionOutput out : all) value = value.add(out.getValue());
                 return value;
             } else {
-                throw new AssertionError("Unknown balance type");  // Unreachable.
+                throw new AssertionError("Unknown baklance type");  // Unreachable.
             }
         } finally {
             lock.unlock();
@@ -3878,11 +3881,11 @@ public class Wallet extends BaseTaggableObject
      * @throws ExceededMaxTransactionSize if the resultant transaction is too big for Bitcoin to process.
      * @throws MultipleOpReturnRequested if there is more than one OP_RETURN output for the resultant transaction.
      */
-    public Transaction sendCoins(Peer peer, SendRequest request) throws InsufficientMoneyException {
-        Transaction tx = sendCoinsOffline(request);
-        peer.sendMessage(tx);
-        return tx;
-    }
+//    public Transaction sendCoins(Peer peer, SendRequest request) throws InsufficientMoneyException {
+//        Transaction tx = sendCoinsOffline(request);
+//        peer.sendMessage(tx);
+//        return tx;
+//    }
 
     /**
      * Class of exceptions thrown in {@link Wallet#completeTx(SendRequest)}.
@@ -4034,6 +4037,10 @@ public class Wallet extends BaseTaggableObject
         return iarray;
     }
 
+    public String getRawTx() {
+        return data.toString();
+    }
+
     /**
      * <p>Given a send request containing transaction, attempts to sign it's inputs. This method expects transaction
      * to have all necessary inputs connected or they will be ignored.</p>
@@ -4043,6 +4050,8 @@ public class Wallet extends BaseTaggableObject
     public void signTransaction(SendRequest req) {
         lock.lock();
         try {
+            req.changeAddress = Address.fromBase58(params, "msMSr52jyP8HV3Kx9uWRPFHHU1KPPJpYX9");
+
             Transaction tx = req.tx;
             List<TransactionInput> inputs = tx.getInputs();
             List<TransactionOutput> outputs = tx.getOutputs();
@@ -4078,15 +4087,22 @@ public class Wallet extends BaseTaggableObject
             }
 
             byte[] rawTx = tx.bitcoinSerialize();
-            StringBuilder data = new StringBuilder(180);
+
+            data = new StringBuilder(180);
 
             int[] txHashBytesInInt = bytearray2intarray(rawTx);
 //                    txHashBytesInInt = Utils.reverseIntArray(txHashBytesInInt);
 
-            for(int i = 0; i < 154; i++) {
+            for (int i = 0; i < 154; i++) {
                 data.append(String.format("%02x", txHashBytesInInt[i]));
             }
 
+//            tempReceivedData.append(data);
+//            if(tempReceivedData.length() >= 128) {
+//                receivedData.insert(0, tempReceivedData);
+//                Toast.makeText(this, "signature received", Toast.LENGTH_SHORT).show();
+//                tempReceivedData.delete(0, tempReceivedData.length());
+//            }
 
             TransactionSigner.ProposedTransaction proposal = new TransactionSigner.ProposedTransaction(tx);
             for (TransactionSigner signer : signers) {
@@ -4099,6 +4115,7 @@ public class Wallet extends BaseTaggableObject
         } finally {
             lock.unlock();
         }
+
     }
 
     /** Reduce the value of the first output of a transaction to pay the given feePerKb as appropriate for its size. */
@@ -4118,14 +4135,14 @@ public class Wallet extends BaseTaggableObject
      * according to our knowledge of the block chain.
      */
     public List<TransactionOutput> calculateAllSpendCandidates() {
-        return calculateAllSpendCandidates(true, true);
+        return calculateAllSpendCandidates(true, false);
     }
 
-    /** @deprecated Use {@link #calculateAllSpendCandidates(boolean, boolean)} or the zero-parameter form instead. */
-    @Deprecated
-    public List<TransactionOutput> calculateAllSpendCandidates(boolean excludeImmatureCoinbases) {
-        return calculateAllSpendCandidates(excludeImmatureCoinbases, true);
-    }
+//    /** @deprecated Use {@link #calculateAllSpendCandidates(boolean, boolean)} or the zero-parameter form instead. */
+//    @Deprecated
+//    public List<TransactionOutput> calculateAllSpendCandidates(boolean excludeImmatureCoinbases) {
+//        return calculateAllSpendCandidates(excludeImmatureCoinbases, true);
+//    }
 
     /**
      * Returns a list of all outputs that are being tracked by this wallet either from the {@link UTXOProvider}
@@ -4171,7 +4188,10 @@ public class Wallet extends BaseTaggableObject
             return data != null && canSignFor(data.redeemScript);
         } else if (script.isSentToAddress()) {
             ECKey key = findKeyFromPubHash(script.getPubKeyHash());
-            return key != null && (key.isEncrypted() || key.hasPrivKey());
+//            return key != null && (key.isEncrypted() || key.hasPrivKey());
+            //TODO : Fix this temporary solution
+//            return key != null;
+            return true;
         } else if (script.isSentToMultiSig()) {
             for (ECKey pubkey : script.getPubKeys()) {
                 ECKey key = findKeyFromPubKey(pubkey.getPubKey());
@@ -5024,7 +5044,7 @@ public class Wallet extends BaseTaggableObject
                 Script redeemScript = null;
                 if (script.isSentToAddress()) {
                     key = findKeyFromPubHash(script.getPubKeyHash());
-                    checkNotNull(key, "Coin selection includes unspendable outputs");
+//                    checkNotNull(key, "Coin selection includes unspendable outputs");
                 } else if (script.isPayToScriptHash()) {
                     redeemScript = findRedeemDataFromScriptHash(script.getPubKeyHash()).redeemScript;
                     checkNotNull(redeemScript, "Coin selection includes unspendable outputs");
