@@ -4061,30 +4061,30 @@ public class Wallet extends BaseTaggableObject
             KeyBag maybeDecryptingKeyBag = new DecryptingKeyBag(this, req.aesKey);
 
             int numInputs = tx.getInputs().size();
-            for (int i = 0; i < numInputs; i++) {
-                TransactionInput txIn = tx.getInput(i);
-                if (txIn.getConnectedOutput() == null) {
-                    // Missing connected output, assuming already signed.
-                    continue;
-                }
-
-                try {
-                    // We assume if its already signed, its hopefully got a SIGHASH type that will not invalidate when
-                    // we sign missing pieces (to check this would require either assuming any signatures are signing
-                    // standard output types or a way to get processed signatures out of script execution)
-                    txIn.getScriptSig().correctlySpends(tx, i, txIn.getConnectedOutput().getScriptPubKey());
-                    log.warn("Input {} already correctly spends output, assuming SIGHASH type used will be safe and skipping signing.", i);
-                    continue;
-                } catch (ScriptException e) {
-                    log.debug("Input contained an incorrect signature", e);
-                    // Expected.
-                }
-
-                Script scriptPubKey = txIn.getConnectedOutput().getScriptPubKey();
-                RedeemData redeemData = txIn.getConnectedRedeemData(maybeDecryptingKeyBag);
-                checkNotNull(redeemData, "Transaction exists in wallet that we cannot redeem: %s", txIn.getOutpoint().getHash());
-                txIn.setScriptSig(scriptPubKey.createEmptyInputScript(redeemData.keys.get(0), redeemData.redeemScript));
-            }
+//            for (int i = 0; i < numInputs; i++) {
+//                TransactionInput txIn = tx.getInput(i);
+//                if (txIn.getConnectedOutput() == null) {
+//                    // Missing connected output, assuming already signed.
+//                    continue;
+//                }
+//
+//                try {
+//                    // We assume if its already signed, its hopefully got a SIGHASH type that will not invalidate when
+//                    // we sign missing pieces (to check this would require either assuming any signatures are signing
+//                    // standard output types or a way to get processed signatures out of script execution)
+//                    txIn.getScriptSig().correctlySpends(tx, i, txIn.getConnectedOutput().getScriptPubKey());
+//                    log.warn("Input {} already correctly spends output, assuming SIGHASH type used will be safe and skipping signing.", i);
+//                    continue;
+//                } catch (ScriptException e) {
+//                    log.debug("Input contained an incorrect signature", e);
+//                    // Expected.
+//                }
+//
+//                Script scriptPubKey = txIn.getConnectedOutput().getScriptPubKey();
+//                RedeemData redeemData = txIn.getConnectedRedeemData(maybeDecryptingKeyBag);
+//                checkNotNull(redeemData, "Transaction exists in wallet that we cannot redeem: %s", txIn.getOutpoint().getHash());
+//                txIn.setScriptSig(scriptPubKey.createEmptyInputScript(redeemData.keys.get(0), redeemData.redeemScript));
+//            }
 
             byte[] rawTx = tx.bitcoinSerialize();
 
@@ -4104,14 +4104,14 @@ public class Wallet extends BaseTaggableObject
 //                tempReceivedData.delete(0, tempReceivedData.length());
 //            }
 
-            TransactionSigner.ProposedTransaction proposal = new TransactionSigner.ProposedTransaction(tx);
-            for (TransactionSigner signer : signers) {
-                if (!signer.signInputs(proposal, maybeDecryptingKeyBag))
-                    log.info("{} returned false for the tx", signer.getClass().getName());
-            }
+//            TransactionSigner.ProposedTransaction proposal = new TransactionSigner.ProposedTransaction(tx);
+//            for (TransactionSigner signer : signers) {
+//                if (!signer.signInputs(proposal, maybeDecryptingKeyBag))
+//                    log.info("{} returned false for the tx", signer.getClass().getName());
+//            }
 
             // resolve missing sigs if any
-            new MissingSigResolutionSigner(req.missingSigsMode).signInputs(proposal, maybeDecryptingKeyBag);
+//            new MissingSigResolutionSigner(req.missingSigsMode).signInputs(proposal, maybeDecryptingKeyBag);
         } finally {
             lock.unlock();
         }

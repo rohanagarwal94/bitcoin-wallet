@@ -29,6 +29,7 @@ import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.VerificationException;
 import org.bitcoinj.core.VersionMessage;
+import org.bitcoinj.crypto.DeterministicHierarchy;
 import org.bitcoinj.crypto.LinuxSecureRandom;
 import org.bitcoinj.crypto.MnemonicCode;
 import org.bitcoinj.utils.Threading;
@@ -233,13 +234,25 @@ public class WalletApplication extends Application {
                 throw new Error("bad wallet network parameters: " + wallet.getParams().getId());
         } else {
             final Stopwatch watch = Stopwatch.createStarted();
-            wallet = new Wallet(Constants.NETWORK_PARAMETERS);
-            wallet.importKey(ECKey.fromPublicOnly(Hex.decode("048144f0617ca9f46faf22c3a2aabe2b5a70b41b33d943eedeab45fb0ea39db03bc29a10850dcc0a8a9459a117c39cf773550f3ed72a4fcfb20b6755086c0419d6")));
-            wallet.addWatchedAddress(Address.fromBase58(Constants.NETWORK_PARAMETERS, "msMSr52jyP8HV3Kx9uWRPFHHU1KPPJpYX9"));
+            String xPub = "tpubD9cB4Cke48quFjAK4eqQqXgYrKwHDgHuNe3bMio4jj4ACJeQ1D74A6HeHuRbUfnffPgEjivpJG2Cx8yLUunbKPfytcfNot4yvdz7zK9F7mo";
+            wallet = Wallet.fromWatchingKeyB58(Constants.NETWORK_PARAMETERS, xPub, DeterministicHierarchy.BIP32_STANDARDISATION_TIME_SECS);
+//            wallet.importKey(ECKey.fromPublicOnly(Hex.decode("048144f0617ca9f46faf22c3a2aabe2b5a70b41b33d943eedeab45fb0ea39db03bc29a10850dcc0a8a9459a117c39cf773550f3ed72a4fcfb20b6755086c0419d6")));
+//            wallet.addWatchedAddress(Address.fromBase58(Constants.NETWORK_PARAMETERS, "msMSr52jyP8HV3Kx9uWRPFHHU1KPPJpYX9"));
             saveWallet();
             backupWallet();
             watch.stop();
             log.info("fresh wallet created, took {}", watch);
+
+            // Print the very first derived address from provided public key
+            System.out.println("Receiving Address : " + wallet.currentReceiveAddress());
+//
+            for(int i=0;i<5;i++) {
+                // Run this statement in a loop, where i is the loop variable.
+                System.out.println(i + " : " + wallet.freshReceiveAddress());
+//                Toast.makeText(this,i, Toast.LENGTH_SHORT).show();
+            }
+
+//            Peergroup.broadcasttransaction(); // For broadcasting
 
             config.armBackupReminder();
         }
