@@ -17,6 +17,7 @@
 
 package de.schildbach.wallet.ui;
 
+import org.bitcoinj.core.Address;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.VerificationException;
 import org.bitcoinj.core.VersionedChecksummedBytes;
@@ -230,6 +231,10 @@ public final class WalletActivity extends AbstractBindServiceActivity {
 
     private void pushTransaction() {
 
+        Address currentReceiveAddress = wallet.currentReceiveAddress();
+//        Address freshReceiveAddress = wallet.freshReceiveAddress();
+        Address changeAddress = wallet.currentChangeAddress();
+
         android.util.Log.d(TAG, "PushTx button clicked");
 
         StringBuilder realTxString = new StringBuilder();
@@ -304,8 +309,7 @@ public final class WalletActivity extends AbstractBindServiceActivity {
                 try {
                     String callObject = call.request().toString();
                     String callbody = call.request().body().toString();
-                    String responseTxObject  = response.body();
-//                            Log.d("response from bc", responseTxObject);
+                    String responseTxObject  = response.body();//                            Log.d("response from bc", responseTxObject);
                     if(response.code() == 201) {
                         Toast.makeText(getApplicationContext(),
                                 "Pushtx successful", Toast.LENGTH_SHORT).show();

@@ -434,9 +434,9 @@ public class Wallet extends BaseTaggableObject
     public Address currentAddress(KeyChain.KeyPurpose purpose) {
         keyChainGroupLock.lock();
         try {
-//            maybeUpgradeToHD();
-//            return keyChainGroup.currentAddress(purpose);
-            return Address.fromBase58(params, "msMSr52jyP8HV3Kx9uWRPFHHU1KPPJpYX9");
+            maybeUpgradeToHD();
+            return keyChainGroup.currentAddress(purpose);
+//            return Address.fromBase58(params, "msMSr52jyP8HV3Kx9uWRPFHHU1KPPJpYX9");
         } finally {
             keyChainGroupLock.unlock();
         }
@@ -3775,6 +3775,15 @@ public class Wallet extends BaseTaggableObject
         }
     }
 
+    public void sendCoinsOfflineWithHardware(SendRequest request) throws InsufficientMoneyException {
+        lock.lock();
+        try {
+            completeTx(request);
+        } finally {
+            lock.unlock();
+        }
+    }
+
     /**
      * <p>Sends coins to the given address, via the given {@link PeerGroup}. Change is returned to
      * {@link Wallet#currentChangeAddress()}. Note that a fee may be automatically added if one may be required for the
@@ -4050,7 +4059,7 @@ public class Wallet extends BaseTaggableObject
     public void signTransaction(SendRequest req) {
         lock.lock();
         try {
-            req.changeAddress = Address.fromBase58(params, "msMSr52jyP8HV3Kx9uWRPFHHU1KPPJpYX9");
+//            req.changeAddress = Address.fromBase58(params, "msMSr52jyP8HV3Kx9uWRPFHHU1KPPJpYX9");
 
             Transaction tx = req.tx;
             List<TransactionInput> inputs = tx.getInputs();
@@ -4093,9 +4102,11 @@ public class Wallet extends BaseTaggableObject
             int[] txHashBytesInInt = bytearray2intarray(rawTx);
 //                    txHashBytesInInt = Utils.reverseIntArray(txHashBytesInInt);
 
-            for (int i = 0; i < 154; i++) {
+            for (int i = 0; i < 119; i++) {
                 data.append(String.format("%02x", txHashBytesInInt[i]));
             }
+
+            String s = null;
 
 //            tempReceivedData.append(data);
 //            if(tempReceivedData.length() >= 128) {

@@ -36,6 +36,7 @@ import org.bitcoinj.core.Address;
 import org.bitcoinj.core.AddressFormatException;
 import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.InsufficientMoneyException;
+import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionConfidence;
@@ -632,7 +633,10 @@ public final class SendCoinsFragment extends Fragment {
         privateKeyPasswordView = (EditText) view.findViewById(R.id.send_coins_private_key_password);
         privateKeyBadPasswordView = view.findViewById(R.id.send_coins_private_key_bad_password);
 
+
+
         viewGo = (Button) view.findViewById(R.id.send_coins_go);
+        viewGo.setEnabled(true);
         viewGo.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(final View v) {
@@ -662,16 +666,6 @@ public final class SendCoinsFragment extends Fragment {
     public void onDestroyView() {
         super.onDestroyView();
         config.setLastExchangeDirection(amountCalculatorLink.getExchangeDirection());
-    }
-
-    public void sendMessageToHardware(String msg) {
-
-        try {
-            usbService.write(msg.getBytes(Constants.CHARSET));
-            Log.d(TAG, "SendMessage: " + msg);
-        } catch (UnsupportedEncodingException e) {
-            Log.e(TAG, e.toString());
-        }
     }
 
     @Override
@@ -911,7 +905,7 @@ public final class SendCoinsFragment extends Fragment {
     }
 
     private boolean everythingPlausible() {
-        return state == State.INPUT && isPayeePlausible() && isAmountPlausible() && isPasswordPlausible();
+        return state == State.INPUT && isAmountPlausible() && isPasswordPlausible();
     }
 
     private void requestFocusFirst() {
@@ -986,7 +980,7 @@ public final class SendCoinsFragment extends Fragment {
     }
 
     private void sendPayment(final SendRequest sendRequest, final Coin finalAmount) {
-        new SendCoinsOfflineTask(wallet, backgroundHandler) {
+        new SendCoinsOfflineTask(wallet, backgroundHandler, usbService, Constants.NETWORK_PARAMETERS) {
             @Override
             protected void onSuccess(final Transaction transaction) {
                 sentTransaction = transaction;
@@ -1162,13 +1156,11 @@ public final class SendCoinsFragment extends Fragment {
                     final Address dummy = wallet.currentReceiveAddress(); // won't be used, tx is never
                                                                           // committed
                     final SendRequest sendRequest = paymentIntent.mergeWithEditedValues(amount, dummy).toSendRequest();
-                    //TODO : Fix this temp solution
-//                  sendRequest.signInputs = false;
+                    sendRequest.signInputs = false;
                     sendRequest.emptyWallet = paymentIntent.mayEditAmount()
                             && amount.equals(wallet.getBalance(BalanceType.AVAILABLE));
                     sendRequest.feePerKb = fees.get(feeCategory);
                     wallet.completeTx(sendRequest);
-                    sendMessageToHardware(wallet.getRawTx());
                     dryrunTransaction = sendRequest.tx;
                 } catch (final Exception x) {
                     dryrunException = x;
@@ -1331,8 +1323,8 @@ public final class SendCoinsFragment extends Fragment {
 
             viewCancel.setEnabled(
                     state != State.REQUEST_PAYMENT_REQUEST && state != State.DECRYPTING && state != State.SIGNING);
-            viewGo.setEnabled(everythingPlausible() && dryrunTransaction != null && fees != null
-                    && (blockchainState == null || !blockchainState.replaying));
+//            viewGo.setEnabled(everythingPlausible() && dryrunTransaction != null && fees != null
+//                    && (blockchainState == null || !blockchainState.replaying));
 
             if (state == null || state == State.REQUEST_PAYMENT_REQUEST) {
                 viewCancel.setText(R.string.button_cancel);

@@ -20,8 +20,12 @@ package de.schildbach.wallet.ui.send;
 import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.InsufficientMoneyException;
+import org.bitcoinj.core.NetworkParameters;
+import org.bitcoinj.core.PeerGroup;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.crypto.KeyCrypterException;
+import org.bitcoinj.signers.TransactionSigner;
+import org.bitcoinj.utils.Threading;
 import org.bitcoinj.wallet.SendRequest;
 import org.bitcoinj.wallet.Wallet;
 import org.bitcoinj.wallet.Wallet.CompletionException;
@@ -30,9 +34,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import de.schildbach.wallet.Constants;
+import de.schildbach.wallet.service.UsbService;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
+
+import java.io.UnsupportedEncodingException;
+import java.util.concurrent.locks.ReentrantLock;
+
+import static de.schildbach.wallet.ui.WalletActivity.TAG;
 
 /**
  * @author Andreas Schildbach
@@ -41,12 +52,17 @@ public abstract class SendCoinsOfflineTask {
     private final Wallet wallet;
     private final Handler backgroundHandler;
     private final Handler callbackHandler;
+    protected final ReentrantLock lock = Threading.lock("sendcoinsofflinetask");
+    private UsbService usbService;
+    private NetworkParameters parameters;
 
     private static final Logger log = LoggerFactory.getLogger(SendCoinsOfflineTask.class);
 
-    public SendCoinsOfflineTask(final Wallet wallet, final Handler backgroundHandler) {
+    public SendCoinsOfflineTask(final Wallet wallet, final Handler backgroundHandler, final UsbService usbService, NetworkParameters parameters) {
         this.wallet = wallet;
         this.backgroundHandler = backgroundHandler;
+        this.usbService = usbService;
+        this.parameters = parameters;
         this.callbackHandler = new Handler(Looper.myLooper());
     }
 
@@ -55,10 +71,26 @@ public abstract class SendCoinsOfflineTask {
             @Override
             public void run() {
                 org.bitcoinj.core.Context.propagate(Constants.CONTEXT);
+                final Transaction transaction;
 
                 try {
                     log.info("sending: {}", sendRequest);
-                    final Transaction transaction = wallet.sendCoinsOffline(sendRequest); // can take long
+
+                    lock.lock();
+                    try {
+                        wallet.sendCoinsOfflineWithHardware(sendRequest); // can take long
+                        //TODO : Check both sendrequest.tx and wallet.getrawtx() values
+//                        transaction = sendRequest.tx;
+                        sendMessageToHardware(wallet.getRawTx());
+                        byte[] finalTransaction = new byte[sendRequest.tx.bitcoinSerialize().length];
+                        byte[] rawTransaction = sendRequest.tx.bitcoinSerialize();
+//                        rawTransaction.
+                        transaction = new Transaction(parameters, sendRequest.tx.bitcoinSerialize());
+//                        wallet.commitTx(transaction);
+
+                    } finally {
+                        lock.unlock();
+                    }
                     log.info("send successful, transaction committed: {}", transaction.getHashAsString());
 
                     callbackHandler.post(new Runnable() {
@@ -123,6 +155,16 @@ public abstract class SendCoinsOfflineTask {
                 }
             }
         });
+    }
+
+    private void sendMessageToHardware(String msg) {
+        //TODO : Change this when scriptkey sign received from hardware
+//        try {
+//            usbService.write(msg.getBytes(Constants.CHARSET));
+//            Log.d(TAG, "SendMessage: " + msg);
+//        } catch (UnsupportedEncodingException e) {
+//            Log.e(TAG, e.toString());
+//        }
     }
 
     protected abstract void onSuccess(Transaction transaction);

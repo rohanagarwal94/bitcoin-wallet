@@ -30,6 +30,7 @@ import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.VerificationException;
 import org.bitcoinj.core.VersionMessage;
 import org.bitcoinj.crypto.DeterministicHierarchy;
+import org.bitcoinj.crypto.DeterministicKey;
 import org.bitcoinj.crypto.LinuxSecureRandom;
 import org.bitcoinj.crypto.MnemonicCode;
 import org.bitcoinj.utils.Threading;
@@ -232,6 +233,7 @@ public class WalletApplication extends Application {
 
             if (!wallet.getParams().equals(Constants.NETWORK_PARAMETERS))
                 throw new Error("bad wallet network parameters: " + wallet.getParams().getId());
+
         } else {
             final Stopwatch watch = Stopwatch.createStarted();
             String xPub = "tpubD9cB4Cke48quFjAK4eqQqXgYrKwHDgHuNe3bMio4jj4ACJeQ1D74A6HeHuRbUfnffPgEjivpJG2Cx8yLUunbKPfytcfNot4yvdz7zK9F7mo";
