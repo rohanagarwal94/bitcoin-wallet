@@ -83,6 +83,12 @@ public class WalletApplication extends Application {
     private File walletFile;
     private Wallet wallet;
     private UsbService usbService;
+    private static WalletApplication myApplication = null;
+
+    // Getter to access Singleton instance
+    public static WalletApplication getInstance() {
+        return myApplication;
+    }
 
     public static final String ACTION_WALLET_REFERENCE_CHANGED = WalletApplication.class.getPackage().getName()
             + ".wallet_reference_changed";
@@ -111,6 +117,8 @@ public class WalletApplication extends Application {
         new LinuxSecureRandom(); // init proper random number generator
 
         Logging.init(getFilesDir());
+
+        myApplication = this;
 
         StrictMode.setThreadPolicy(new StrictMode.ThreadPolicy.Builder().detectAll().permitDiskReads()
                 .permitDiskWrites().penaltyLog().build());

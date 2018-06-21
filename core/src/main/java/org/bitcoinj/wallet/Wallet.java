@@ -4059,7 +4059,9 @@ public class Wallet extends BaseTaggableObject
     public void signTransaction(SendRequest req) {
         lock.lock();
         try {
-//            req.changeAddress = Address.fromBase58(params, "msMSr52jyP8HV3Kx9uWRPFHHU1KPPJpYX9");
+
+            //TODO : Change this on figuring out the address position
+            req.changeAddress = Address.fromBase58(params, "mwoj7ZpZ4LH4hJcWQ6y3PhiUs5FTNhC3RS");
 
             Transaction tx = req.tx;
             List<TransactionInput> inputs = tx.getInputs();
@@ -4070,30 +4072,30 @@ public class Wallet extends BaseTaggableObject
             KeyBag maybeDecryptingKeyBag = new DecryptingKeyBag(this, req.aesKey);
 
             int numInputs = tx.getInputs().size();
-//            for (int i = 0; i < numInputs; i++) {
-//                TransactionInput txIn = tx.getInput(i);
-//                if (txIn.getConnectedOutput() == null) {
-//                    // Missing connected output, assuming already signed.
-//                    continue;
-//                }
-//
-//                try {
-//                    // We assume if its already signed, its hopefully got a SIGHASH type that will not invalidate when
-//                    // we sign missing pieces (to check this would require either assuming any signatures are signing
-//                    // standard output types or a way to get processed signatures out of script execution)
-//                    txIn.getScriptSig().correctlySpends(tx, i, txIn.getConnectedOutput().getScriptPubKey());
-//                    log.warn("Input {} already correctly spends output, assuming SIGHASH type used will be safe and skipping signing.", i);
-//                    continue;
-//                } catch (ScriptException e) {
-//                    log.debug("Input contained an incorrect signature", e);
-//                    // Expected.
-//                }
-//
-//                Script scriptPubKey = txIn.getConnectedOutput().getScriptPubKey();
+            for (int i = 0; i < numInputs; i++) {
+                TransactionInput txIn = tx.getInput(i);
+                if (txIn.getConnectedOutput() == null) {
+                    // Missing connected output, assuming already signed.
+                    continue;
+                }
+
+                try {
+                    // We assume if its already signed, its hopefully got a SIGHASH type that will not invalidate when
+                    // we sign missing pieces (to check this would require either assuming any signatures are signing
+                    // standard output types or a way to get processed signatures out of script execution)
+                    txIn.getScriptSig().correctlySpends(tx, i, txIn.getConnectedOutput().getScriptPubKey());
+                    log.warn("Input {} already correctly spends output, assuming SIGHASH type used will be safe and skipping signing.", i);
+                    continue;
+                } catch (ScriptException e) {
+                    log.debug("Input contained an incorrect signature", e);
+                    // Expected.
+                }
+
+                Script scriptPubKey = txIn.getConnectedOutput().getScriptPubKey();
+                txIn.setScriptSig(scriptPubKey);
 //                RedeemData redeemData = txIn.getConnectedRedeemData(maybeDecryptingKeyBag);
-//                checkNotNull(redeemData, "Transaction exists in wallet that we cannot redeem: %s", txIn.getOutpoint().getHash());
 //                txIn.setScriptSig(scriptPubKey.createEmptyInputScript(redeemData.keys.get(0), redeemData.redeemScript));
-//            }
+            }
 
             byte[] rawTx = tx.bitcoinSerialize();
 
@@ -4102,11 +4104,13 @@ public class Wallet extends BaseTaggableObject
             int[] txHashBytesInInt = bytearray2intarray(rawTx);
 //                    txHashBytesInInt = Utils.reverseIntArray(txHashBytesInInt);
 
-            for (int i = 0; i < 119; i++) {
+            for (int i = 0; i < 144; i++) {
                 data.append(String.format("%02x", txHashBytesInInt[i]));
             }
 
-            String s = null;
+            //TODO: Change this in future
+            //Appending SigHash
+            data.append("01000000");
 
 //            tempReceivedData.append(data);
 //            if(tempReceivedData.length() >= 128) {

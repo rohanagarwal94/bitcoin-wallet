@@ -24,6 +24,7 @@ import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.lang.ref.WeakReference;
+import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
@@ -57,6 +58,7 @@ import org.spongycastle.crypto.params.KeyParameter;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+import com.google.j2objc.annotations.Weak;
 
 import de.schildbach.wallet.Configuration;
 import de.schildbach.wallet.Constants;
@@ -146,6 +148,11 @@ import android.widget.Toast;
 public final class SendCoinsFragment extends Fragment {
     private AbstractBindServiceActivity activity;
     private WalletApplication application;
+    private MyHandler usbHandler;
+    private StringBuilder receivedData = new StringBuilder(128);
+    private StringBuilder tempReceivedData = new StringBuilder(128);
+    private byte[] realTransaction = new byte[148];
+    public static RealTransactionCallback realTransactionCallback;
     private Configuration config;
     private Wallet wallet;
     private UsbService usbService;
@@ -215,37 +222,6 @@ public final class SendCoinsFragment extends Fragment {
         REQUEST_PAYMENT_REQUEST, //
         INPUT, // asks for confirmation
         DECRYPTING, SIGNING, SENDING, SENT, FAILED // sending states
-    }
-
-    public static class MyHandler extends Handler {
-        private final WeakReference<WalletActivity> mActivity;
-
-        public MyHandler(WalletActivity activity) {
-            mActivity = new WeakReference<>(activity);
-        }
-
-        @Override
-        public void handleMessage(Message msg) {
-            switch (msg.what) {
-                case UsbService.MESSAGE_FROM_SERIAL_PORT:
-                    String data = (String) msg.obj;
-                    if (data != null) {
-                        mActivity.get().prepareDataToBroadcast(data);
-                    }
-                    break;
-                case UsbService.CTS_CHANGE:
-                    Log.d(TAG, "CTS_CHANGE");
-                    Toast.makeText(mActivity.get(), "CTS_CHANGE", Toast.LENGTH_LONG).show();
-                    break;
-                case UsbService.DSR_CHANGE:
-                    Log.d(TAG, "DSR_CHANGE");
-                    Toast.makeText(mActivity.get(), "DSR_CHANGE", Toast.LENGTH_LONG).show();
-                    break;
-                default:
-                    Log.e(TAG, "Unknown message");
-                    break;
-            }
-        }
     }
 
     private final class ReceivingAddressListener
@@ -521,6 +497,125 @@ public final class SendCoinsFragment extends Fragment {
         this.usbService = application.getUsbService();
     }
 
+    public static class MyHandler extends Handler {
+
+        WeakReference<SendCoinsFragment> sendCoinsFragmentWeakReference;
+
+        public MyHandler(SendCoinsFragment sendCoinsFragment) {
+            this.sendCoinsFragmentWeakReference = new WeakReference<>(sendCoinsFragment);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case UsbService.MESSAGE_FROM_SERIAL_PORT:
+                    String data = (String) msg.obj;
+                    if (data != null) {
+                        sendCoinsFragmentWeakReference.get().accumulateData(data);
+                    }
+                    break;
+                case UsbService.CTS_CHANGE:
+                    Log.d(TAG, "CTS_CHANGE");
+                    break;
+                case UsbService.DSR_CHANGE:
+                    Log.d(TAG, "DSR_CHANGE");
+                    break;
+                default:
+                    Log.e(TAG, "Unknown message");
+                    break;
+            }
+        }
+    }
+
+    private void accumulateData(String dataBits) {
+        tempReceivedData.append(dataBits);
+        if(tempReceivedData.length() >= 128) {
+            receivedData.insert(0, tempReceivedData);
+            Log.d("received data length", "Complete signature received");
+            tempReceivedData.delete(0, tempReceivedData.length());
+            constructRealTransaction();
+        }
+    }
+
+    private void constructRealTransaction() {
+
+        android.util.Log.d(TAG, "PushTx button clicked");
+
+        StringBuilder realTxString = new StringBuilder();
+        StringBuilder scriptSig = new StringBuilder();
+
+        int opcode = 47;
+        int header = 30;
+        int sigLength = 44;
+        String integerC = "02";
+        int RSLength = 20;
+        int pushDataOpCode = 21;
+        String sigCode = "01";
+        int[] compressedSenderPublicAddress = new int[]{2,129,68,240,97,124,169,244,111,175,34,195,162,170,190,43,90,112,180,27,51,217,67,238,222,171,69,251,14,163,157,176,59};
+
+        scriptSig.append(opcode);
+        scriptSig.append(header);
+        scriptSig.append(sigLength);
+        scriptSig.append(integerC);
+        scriptSig.append(RSLength);
+        receivedData.insert(64, "0220");
+        scriptSig.append(receivedData);
+        scriptSig.append(sigCode);
+        scriptSig.append(pushDataOpCode);
+
+        realTxString.append(wallet.getRawTx());
+
+        //Delete sighash
+        realTxString.delete(288,296);
+        //Replace script length
+        realTxString.replace(82, 84, "6a");
+
+        int temp1 = Integer.parseInt(receivedData.substring(0, 2), 16);
+        int temp2 = Integer.parseInt(receivedData.substring(68, 70), 16);
+
+        if((Integer.parseInt(receivedData.substring(0, 2), 16) > 127) && (Integer.parseInt(receivedData.substring(68, 70), 16) > 127)) {
+
+            realTxString.replace(82, 84, "6c");
+            scriptSig.replace(0, 2, "49");
+            scriptSig.replace(4, 6, "46");
+            scriptSig.replace(8, 10, "2100");
+            scriptSig.replace(78, 80, "2100");
+
+        } else if(Integer.parseInt(receivedData.substring(0, 2), 16) > 127) {
+
+            realTxString.replace(82, 84, "6b");
+            scriptSig.replace(0, 2, "48");
+            scriptSig.replace(4, 6, "45");
+            scriptSig.replace(8, 10, "2100");
+
+        } else if(Integer.parseInt(receivedData.substring(68, 70), 16) > 127) {
+
+            realTxString.replace(82, 84, "6b");
+            scriptSig.replace(0, 2, "48");
+            scriptSig.replace(4, 6, "45");
+            scriptSig.replace(76, 78, "2100");
+        }
+
+        receivedData.delete(0, receivedData.length());
+
+        for(int i = 0; i < compressedSenderPublicAddress.length; i++) {
+            scriptSig.append(String.format("%02x", compressedSenderPublicAddress[i]));
+        }
+
+        //Replace scriptpubkey with Received data
+        realTxString.replace(84,134, scriptSig.toString());
+
+        realTransaction = realTxString.toString().getBytes(Charset.forName("UTF-8"));
+
+        realTransactionCallback.callbackCall(realTransaction);
+
+        int[] locktime = {0,0,0};
+    }
+
+    public interface RealTransactionCallback {
+        void callbackCall(byte[] transaction);
+    }
+
     @Override
     public void onCreate(final Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -529,6 +624,9 @@ public final class SendCoinsFragment extends Fragment {
         setHasOptionsMenu(true);
 
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        usbHandler = new MyHandler(this);
+
+        usbService.setHandler(usbHandler);
 
         backgroundThread = new HandlerThread("backgroundThread", Process.THREAD_PRIORITY_BACKGROUND);
         backgroundThread.start();

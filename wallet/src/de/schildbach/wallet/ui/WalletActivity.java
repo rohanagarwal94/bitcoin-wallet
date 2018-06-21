@@ -17,7 +17,6 @@
 
 package de.schildbach.wallet.ui;
 
-import org.bitcoinj.core.Address;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.VerificationException;
 import org.bitcoinj.core.VersionedChecksummedBytes;
@@ -26,9 +25,7 @@ import org.bitcoinj.wallet.Wallet;
 import de.schildbach.wallet.Configuration;
 import de.schildbach.wallet.Constants;
 import de.schildbach.wallet.WalletApplication;
-import de.schildbach.wallet.api.ClientBuilder;
 import de.schildbach.wallet.data.PaymentIntent;
-import de.schildbach.wallet.model.PushTx;
 import de.schildbach.wallet.service.BlockchainService;
 import de.schildbach.wallet.service.UsbService;
 import de.schildbach.wallet.ui.InputParser.BinaryInputParser;
@@ -37,14 +34,10 @@ import de.schildbach.wallet.ui.backup.BackupWalletDialogFragment;
 import de.schildbach.wallet.ui.backup.RestoreWalletDialogFragment;
 import de.schildbach.wallet.ui.preference.PreferenceActivity;
 import de.schildbach.wallet.ui.send.SendCoinsActivity;
-import de.schildbach.wallet.ui.send.SendCoinsFragment;
 import de.schildbach.wallet.ui.send.SweepWalletActivity;
 import de.schildbach.wallet.util.CrashReporter;
 import de.schildbach.wallet.util.Nfc;
 import de.schildbach.wallet_test.R;
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;
 
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -52,6 +45,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.res.Resources;
 import android.nfc.NdefMessage;
@@ -59,7 +53,6 @@ import android.nfc.NfcAdapter;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
-import android.support.annotation.NonNull;
 import android.support.v4.app.FragmentManager;
 import android.util.Log;
 import android.view.Menu;
@@ -72,21 +65,18 @@ import android.widget.Toast;
  * @author Andreas Schildbach
  */
 public final class WalletActivity extends AbstractBindServiceActivity {
-    private WalletApplication application;
+    private WalletApplication application = WalletApplication.getInstance();
     private Configuration config;
     private Wallet wallet;
     private boolean isConnect = false;
-    private SendCoinsFragment.MyHandler mHandler;
 
     public static final String TAG = "WalletActivity";
+    public static boolean isUsbReady = false;
 
     private UsbService usbService;
     private ServiceConnection usbConnection;
 
     private Handler handler = new Handler();
-
-    private StringBuilder receivedData = new StringBuilder(128);
-    private StringBuilder tempReceivedData = new StringBuilder(128);
 
     private static final int REQUEST_CODE_SCAN = 0;
 
@@ -94,15 +84,11 @@ public final class WalletActivity extends AbstractBindServiceActivity {
     protected void onCreate(final Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        application = getWalletApplication();
         config = application.getConfiguration();
         wallet = application.getWallet();
-        usbService = application.getUsbService();
         usbConnection = application.getUsbConnection();
 
         setContentView(R.layout.wallet_content);
-
-        mHandler = new SendCoinsFragment.MyHandler(this);
 
         final View exchangeRatesFragment = findViewById(R.id.wallet_main_twopanes_exchange_rates);
         if (exchangeRatesFragment != null)
@@ -152,12 +138,14 @@ public final class WalletActivity extends AbstractBindServiceActivity {
                     Toast.makeText(context,
                             getString(R.string.usb_permission_granted),
                             Toast.LENGTH_SHORT).show();
+                    isUsbReady = true;
                     requestConnection();
                     break;
                 case UsbService.ACTION_USB_PERMISSION_NOT_GRANTED:
                     Toast.makeText(context,
                             getString(R.string.usb_permission_not_granted),
                             Toast.LENGTH_SHORT).show();
+                    isUsbReady = false;
                     break;
                 case UsbService.ACTION_NO_USB:
                     Toast.makeText(context,
@@ -168,6 +156,7 @@ public final class WalletActivity extends AbstractBindServiceActivity {
                     Toast.makeText(context,
                             getString(R.string.usb_disconnected),
                             Toast.LENGTH_SHORT).show();
+                    isUsbReady = false;
                     stopConnection();
                     break;
                 case UsbService.ACTION_USB_NOT_SUPPORTED:
@@ -182,7 +171,7 @@ public final class WalletActivity extends AbstractBindServiceActivity {
     };
 
     private void startConnection() {
-        usbService.setHandler(mHandler);
+        usbService = application.getUsbService();
         isConnect = true;
         Toast.makeText(this,
                 getString(R.string.start_connection),Toast.LENGTH_SHORT).show();
@@ -201,11 +190,22 @@ public final class WalletActivity extends AbstractBindServiceActivity {
         alertDialog.create().show();
     }
 
+    private void setFilters() {
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(UsbService.ACTION_USB_PERMISSION_GRANTED);
+        filter.addAction(UsbService.ACTION_NO_USB);
+        filter.addAction(UsbService.ACTION_USB_DISCONNECTED);
+        filter.addAction(UsbService.ACTION_USB_NOT_SUPPORTED);
+        filter.addAction(UsbService.ACTION_USB_PERMISSION_NOT_GRANTED);
+        registerReceiver(mUsbReceiver, filter);
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
 
         startService(UsbService.class, usbConnection);
+        setFilters();
 
         handler.postDelayed(new Runnable() {
             @Override
@@ -214,117 +214,6 @@ public final class WalletActivity extends AbstractBindServiceActivity {
                 BlockchainService.start(WalletActivity.this, true);
             }
         }, 1000);
-    }
-
-    public void prepareDataToBroadcast(String data) {
-        tempReceivedData.append(data);
-        if(tempReceivedData.length() >= 128) {
-            receivedData.insert(0, tempReceivedData);
-            Log.d("received data length", "Complete signature received");
-            Toast.makeText(this, "signature received", Toast.LENGTH_SHORT).show();
-            tempReceivedData.delete(0, tempReceivedData.length());
-            pushTransaction();
-        } else {
-            Toast.makeText(this, "incomplete signature", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void pushTransaction() {
-
-        Address currentReceiveAddress = wallet.currentReceiveAddress();
-//        Address freshReceiveAddress = wallet.freshReceiveAddress();
-        Address changeAddress = wallet.currentChangeAddress();
-
-        android.util.Log.d(TAG, "PushTx button clicked");
-
-        StringBuilder realTxString = new StringBuilder();
-        StringBuilder scriptSig = new StringBuilder();
-
-        int opcode = 47;
-        int header = 30;
-        int sigLength = 44;
-        String integerC = "02";
-        int RSLength = 20;
-        int pushDataOpCode = 21;
-        String sigCode = "01";
-        int[] compressedSenderPublicAddress = new int[]{2,129,68,240,97,124,169,244,111,175,34,195,162,170,190,43,90,112,180,27,51,217,67,238,222,171,69,251,14,163,157,176,59};
-
-        scriptSig.append(opcode);
-        scriptSig.append(header);
-        scriptSig.append(sigLength);
-        scriptSig.append(integerC);
-        scriptSig.append(RSLength);
-        receivedData.insert(64, "0220");
-        scriptSig.append(receivedData);
-        scriptSig.append(sigCode);
-        scriptSig.append(pushDataOpCode);
-
-        realTxString.append(wallet.getRawTx());
-
-        //Delete sighash
-        realTxString.delete(288,296);
-        //Replace script length
-        realTxString.replace(82, 84, "6a");
-
-        int temp1 = Integer.parseInt(receivedData.substring(0, 2), 16);
-        int temp2 = Integer.parseInt(receivedData.substring(68, 70), 16);
-
-        if((Integer.parseInt(receivedData.substring(0, 2), 16) > 127) && (Integer.parseInt(receivedData.substring(68, 70), 16) > 127)) {
-
-            realTxString.replace(82, 84, "6c");
-            scriptSig.replace(0, 2, "49");
-            scriptSig.replace(4, 6, "46");
-            scriptSig.replace(8, 10, "2100");
-            scriptSig.replace(78, 80, "2100");
-
-        } else if(Integer.parseInt(receivedData.substring(0, 2), 16) > 127) {
-
-            realTxString.replace(82, 84, "6b");
-            scriptSig.replace(0, 2, "48");
-            scriptSig.replace(4, 6, "45");
-            scriptSig.replace(8, 10, "2100");
-
-        } else if(Integer.parseInt(receivedData.substring(68, 70), 16) > 127) {
-
-            realTxString.replace(82, 84, "6b");
-            scriptSig.replace(0, 2, "48");
-            scriptSig.replace(4, 6, "45");
-            scriptSig.replace(76, 78, "2100");
-        }
-
-        receivedData.delete(0, receivedData.length());
-
-        for(int i = 0; i < compressedSenderPublicAddress.length; i++) {
-            scriptSig.append(String.format("%02x", compressedSenderPublicAddress[i]));
-        }
-
-        //Replace scriptpubkey with Received data
-        realTxString.replace(84,134, scriptSig.toString());
-
-        PushTx pushTx = new PushTx(realTxString.toString());
-
-        new ClientBuilder(Constants.BASE_URL_PUSHTX).getBlockchainApi().pushTx(pushTx, "2f0a91ede7634dcfa99291e97146ddd8").enqueue(new Callback<String>() {
-            @Override
-            public void onResponse(@NonNull Call<String> call, @NonNull Response<String> response) {
-                try {
-                    String callObject = call.request().toString();
-                    String callbody = call.request().body().toString();
-                    String responseTxObject  = response.body();//                            Log.d("response from bc", responseTxObject);
-                    if(response.code() == 201) {
-                        Toast.makeText(getApplicationContext(),
-                                "Pushtx successful", Toast.LENGTH_SHORT).show();
-                    }
-                } catch (NullPointerException e) {
-                    e.printStackTrace();
-                }
-            }
-
-            @Override
-            public void onFailure(@NonNull Call<String> call, @NonNull Throwable t) {
-                t.printStackTrace();
-                Toast.makeText(getApplicationContext(), "Push successful", Toast.LENGTH_LONG).show();
-            }
-        });
     }
 
     @Override

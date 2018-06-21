@@ -35,12 +35,17 @@ import org.slf4j.LoggerFactory;
 
 import de.schildbach.wallet.Constants;
 import de.schildbach.wallet.service.UsbService;
+import de.schildbach.wallet.ui.WalletActivity;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Message;
 import android.util.Log;
+import android.widget.Toast;
 
 import java.io.UnsupportedEncodingException;
+import java.lang.ref.WeakReference;
+import java.nio.charset.Charset;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static de.schildbach.wallet.ui.WalletActivity.TAG;
@@ -49,16 +54,17 @@ import static de.schildbach.wallet.ui.WalletActivity.TAG;
  * @author Andreas Schildbach
  */
 public abstract class SendCoinsOfflineTask {
-    private final Wallet wallet;
+    private static Wallet wallet;
     private final Handler backgroundHandler;
     private final Handler callbackHandler;
     protected final ReentrantLock lock = Threading.lock("sendcoinsofflinetask");
     private UsbService usbService;
     private NetworkParameters parameters;
+    private Transaction transaction;
 
     private static final Logger log = LoggerFactory.getLogger(SendCoinsOfflineTask.class);
 
-    public SendCoinsOfflineTask(final Wallet wallet, final Handler backgroundHandler, final UsbService usbService, NetworkParameters parameters) {
+    public SendCoinsOfflineTask(Wallet wallet, final Handler backgroundHandler, final UsbService usbService, NetworkParameters parameters) {
         this.wallet = wallet;
         this.backgroundHandler = backgroundHandler;
         this.usbService = usbService;
@@ -71,7 +77,6 @@ public abstract class SendCoinsOfflineTask {
             @Override
             public void run() {
                 org.bitcoinj.core.Context.propagate(Constants.CONTEXT);
-                final Transaction transaction;
 
                 try {
                     log.info("sending: {}", sendRequest);
@@ -82,16 +87,21 @@ public abstract class SendCoinsOfflineTask {
                         //TODO : Check both sendrequest.tx and wallet.getrawtx() values
 //                        transaction = sendRequest.tx;
                         sendMessageToHardware(wallet.getRawTx());
-                        byte[] finalTransaction = new byte[sendRequest.tx.bitcoinSerialize().length];
-                        byte[] rawTransaction = sendRequest.tx.bitcoinSerialize();
-//                        rawTransaction.
-                        transaction = new Transaction(parameters, sendRequest.tx.bitcoinSerialize());
-//                        wallet.commitTx(transaction);
+
+                        SendCoinsFragment.realTransactionCallback = new SendCoinsFragment.RealTransactionCallback() {
+                            @Override
+                            public void callbackCall(byte[] realTransaction) {
+                                byte[] finalTransaction = new byte[sendRequest.tx.bitcoinSerialize().length];
+                                byte[] rawTransaction = sendRequest.tx.bitcoinSerialize();
+
+                                transaction = new Transaction(parameters, realTransaction);
+                                wallet.commitTx(transaction);
+                            }
+                        };
 
                     } finally {
                         lock.unlock();
                     }
-                    log.info("send successful, transaction committed: {}", transaction.getHashAsString());
 
                     callbackHandler.post(new Runnable() {
                         @Override
@@ -159,12 +169,13 @@ public abstract class SendCoinsOfflineTask {
 
     private void sendMessageToHardware(String msg) {
         //TODO : Change this when scriptkey sign received from hardware
-//        try {
-//            usbService.write(msg.getBytes(Constants.CHARSET));
-//            Log.d(TAG, "SendMessage: " + msg);
-//        } catch (UnsupportedEncodingException e) {
-//            Log.e(TAG, e.toString());
-//        }
+        try {
+            usbService.write(msg.getBytes(Constants.CHARSET));
+            Log.d(TAG, "SendMessage: " + msg);
+
+        } catch (UnsupportedEncodingException e) {
+            Log.e(TAG, e.toString());
+        }
     }
 
     protected abstract void onSuccess(Transaction transaction);
